@@ -1,0 +1,24 @@
+const assert=require('node:assert/strict');
+const memory=new Map();global.localStorage={getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)};
+const {useNation,getPlot}=require('../work/test-build/store.js');
+const {plots,territories,inside,protectedLand}=require('../work/test-build/data.js');
+const state=()=>useNation.getState();
+state().reset();
+assert.equal(new Set(plots.map(p=>p.id)).size,plots.length);
+for(const t of territories)assert(plots.some(p=>p.territory===t.id));
+for(const p of plots){assert(!protectedLand(p.x,p.z));const t=territories.find(t=>t.id===p.territory);for(const dx of [-.34,.34])for(const dz of [-.34,.34])assert(inside([p.x+dx,p.z+dz],t.points));}
+const available=plots.find(p=>!p.owner),resale=plots.find(p=>p.listed),other=plots.find(p=>p.owner&&!p.listed);
+assert(state().buy(available.id));
+state().setCitizen({id:'test-citizen',name:'Test',state:'AUR',avatar:'✦',joined:'2026-10-25'});
+assert.equal(state().buy(available.id),null);assert.equal(getPlot(available.id,state()).owner,'test-citizen');assert.equal(state().transactions.length,1);
+assert(state().buy(available.id));assert.equal(state().transactions.length,1);
+assert(state().buy(other.id));assert(state().list(other.id,1000));assert(state().list(available.id,NaN));
+assert.equal(state().list(available.id,6000),null);assert(getPlot(available.id,state()).listed);assert(state().buy(available.id));
+state().withdraw(available.id);assert.equal(getPlot(available.id,state()).listed,false);
+const b={template:'Modern villa',wall:'#abcdef',roof:'#123456',rotation:90,garden:true};state().build(available.id,b);assert.deepEqual(getPlot(available.id,state()).building,b);
+assert.equal(state().offer(resale.id,4000),null);const o=state().offers[0];assert.equal(getPlot(resale.id,state()).owner,resale.owner);assert(state().offer(resale.id,4000));
+assert.equal(state().resolveOffer(o.id,true),null);assert.equal(getPlot(resale.id,state()).owner,'test-citizen');assert.equal(getPlot(resale.id,state()).listed,false);assert(state().resolveOffer(o.id,true));
+assert.equal(state().vote('UMB','The Makers'),false);assert.equal(state().vote('AUR','The Makers'),true);assert.equal(state().vote('AUR','The Dreamers'),false);
+state().plan('Uiiyan+');assert.equal(state().vote('AUR','The Dreamers'),false);
+const persisted=JSON.parse(memory.get('uiinapur-nation-v1'));assert.equal(persisted.state.changes[available.id].owner,'test-citizen');assert.equal(persisted.state.transactions.length,2);
+console.log(`PASS: ${plots.length} unique bounded parcels in 7 territories; acquisition, double-sale prevention, authorization, listings, offers, construction, voting, and persistence.`);

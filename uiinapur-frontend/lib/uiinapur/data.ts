@@ -16,8 +16,8 @@ export const territories: Territory[] = [
     { id: 'INA', name: 'Inaris', color: '#e2c37e', subtitle: 'Golden shores. Infinite possibilities.', center: [-10, 0], points: [[-5, -4], [-6, 1], [-3, 5], [-7, 8], [-11, 6], [-14, 7], [-16, 3], [-14, 0], [-15, -3], [-11, -6], [-8, -8]] },
     { id: 'PNK', name: 'Pinkyork', color: '#d797b5', subtitle: 'A city for the beautifully different', center: [10, 0], points: [[5, -4], [8, -9], [11, -7], [14, -5], [13, -2], [16, 0], [15, 4], [12, 7], [8, 6], [3, 5], [6, 1]] },
     { id: 'FUI', name: 'Fuina', color: '#79aeda', subtitle: 'Made of ocean and ambition', center: [0, 9], points: [[-3, 5], [3, 5], [8, 6], [9, 10], [6, 12], [5, 15], [1, 16], [-2, 14], [-6, 13], [-9, 10], [-7, 8]] },
-    { id: 'IS1', name: 'Poo', color: '#73c9bd', subtitle: 'A quiet corner of the extraordinary', center: [-19, 11], points: [[-22, 9], [-19, 7], [-16, 9], [-16, 12], [-19, 14], [-22, 12]] },
-    { id: 'IS2', name: 'Smile', color: '#c7b18a', subtitle: 'Beyond the familiar horizon', center: [20, -10], points: [[18, -13], [21, -14], [24, -11], [23, -8], [20, -6], [17, -9]] }
+    { id: 'IS1', name: 'Island 01', color: '#73c9bd', subtitle: 'A quiet corner of the extraordinary', center: [-19, 11], points: [[-22, 9], [-19, 7], [-16, 9], [-16, 12], [-19, 14], [-22, 12]] },
+    { id: 'IS2', name: 'Island 02', color: '#c7b18a', subtitle: 'Beyond the familiar horizon', center: [20, -10], points: [[18, -13], [21, -14], [24, -11], [23, -8], [20, -6], [17, -9]] }
 ];
 export function inside(p: Point, poly: Point[]) { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const a = poly[i], b = poly[j];

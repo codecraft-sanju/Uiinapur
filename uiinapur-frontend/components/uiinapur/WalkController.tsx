@@ -4,15 +4,18 @@ import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { inside, plots, territories } from '@/lib/uiinapur/data';
-import { dryFootprint, movement, verticalStep, WALK, type WalkInput, type WalkStatus } from '@/lib/uiinapur/walk';
+import { dryFootprint, verticalStep, WALK, type WalkInput, type WalkStatus } from '@/lib/uiinapur/walk';
 import { PLAZA_SPAWN, nearbyLandmark, publicLand } from '@/lib/uiinapur/city';
+import { createCameraPointers, createKeyboard, readMovement } from '@/lib/uiinapur/walkInput';
+import { CITIZENS } from '@/lib/uiinapur/citizens';
+import type { SocialSession } from '@/lib/uiinapur/social';
 import WalkAvatar, { type AvatarMotion } from './WalkAvatar';
 
-export type WalkSession = { input: WalkInput; onStatus: (status: WalkStatus) => void; onExit: () => void };
+export type WalkSession = { input: WalkInput; social:SocialSession; onStatus: (status: WalkStatus) => void; onExit: () => void };
 type Props = WalkSession & { environment: RefObject<THREE.Group | null>; region: string; selected: string | null };
 const UP = new THREE.Vector3(0, 1, 0), DOWN = new THREE.Vector3(0, -1, 0);
 
-export default function WalkController({ environment, region, selected, input, onStatus, onExit }: Props) {
+export default function WalkController({ environment, region, selected, input, social, onStatus, onExit }: Props) {
   const { camera, gl } = useThree();
   const avatar = useRef<THREE.Group>(null);
   const motion = useRef<AvatarMotion>({ speed: 0, grounded: true, phase: 0 });
@@ -24,43 +27,31 @@ export default function WalkController({ environment, region, selected, input, o
     dummy: new THREE.Object3D(), normal: new THREE.Vector3(), spawn: new THREE.Vector3() }), []);
 
   useEffect(() => {
-    const canvas = gl.domElement, pointers = new Map<number, { x: number; y: number }>();
+    const canvas = gl.domElement, pointers = createCameraPointers(state);
     const previousTouch = canvas.style.touchAction, previousCursor = canvas.style.cursor;
     const originalNear = camera instanceof THREE.PerspectiveCamera ? camera.near : .1;
     if (camera instanceof THREE.PerspectiveCamera) { camera.near = .035; camera.updateProjectionMatrix(); }
     canvas.style.touchAction = 'none'; canvas.style.cursor = 'grab';
-    const clear = () => { state.keys.clear(); input.x = input.y = 0; input.run = input.jump = false; input.reset++; pointers.clear(); };
-    const editing = (target: EventTarget | null) => target instanceof HTMLElement && !!target.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]');
-    const keydown = (e: KeyboardEvent) => {
-      if (e.code === 'Escape') { clear(); onExit(); return; }
-      if (editing(e.target)) return;
-      if (['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','Space'].includes(e.code)) {
-        e.preventDefault(); state.keys.add(e.code); if (e.code === 'Space' && !e.repeat) input.jump = true;
-      }
-    };
-    const keyup = (e: KeyboardEvent) => { state.keys.delete(e.code); };
-    const down = (e: PointerEvent) => { if (e.pointerType === 'mouse' && e.button !== 0) return; pointers.set(e.pointerId, { x:e.clientX, y:e.clientY }); canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing'; };
-    const move = (e: PointerEvent) => {
-      const p = pointers.get(e.pointerId); if (!p) return;
-      if (pointers.size === 2) {
-        const other = [...pointers.entries()].find(([id]) => id !== e.pointerId)?.[1];
-        if (other) { const before = Math.hypot(p.x-other.x,p.y-other.y), after = Math.hypot(e.clientX-other.x,e.clientY-other.y); state.distance = THREE.MathUtils.clamp(state.distance + (before-after)*.007, .9, 4); }
-      } else { state.yaw -= (e.clientX-p.x)*.005; state.pitch = THREE.MathUtils.clamp(state.pitch + (e.clientY-p.y)*.004, .12, 1.15); }
-      pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
-    };
-    const end = (e: PointerEvent) => { pointers.delete(e.pointerId); if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); canvas.style.cursor = 'grab'; };
-    const wheel = (e: WheelEvent) => { e.preventDefault(); state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY*(e.deltaMode===1?.03:.002), .9, 4); };
+    const editing = () => !!document.activeElement?.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]') || !!document.querySelector('[role="dialog"][aria-modal="true"]');
+    const keyboard=createKeyboard(input,state.keys,editing,()=>{if(social.activeId)social.onTalk(null);else onExit();});
+    const clear=()=>{keyboard.clear();state.reset=input.reset;pointers.clear();};
+    const keydown=(e:KeyboardEvent)=>{if(state.reset!==input.reset){state.keys.clear();state.reset=input.reset;}keyboard.down(e);},keyup=(e:KeyboardEvent)=>keyboard.up(e);
+    const focus=()=>{if(editing())clear();};
+    const down = (e: PointerEvent) => { if(input.blocked)return; if (e.pointerType === 'mouse' && e.button !== 0) return; pointers.down(e.pointerId,e.clientX,e.clientY); canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing'; };
+    const move = (e: PointerEvent) => {if(!input.blocked)pointers.move(e.pointerId,e.clientX,e.clientY);};
+    const end = (e: PointerEvent) => { pointers.end(e.pointerId); if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); canvas.style.cursor = 'grab'; };
+    const wheel = (e: WheelEvent) => { e.preventDefault(); if(input.blocked)return; state.distance = THREE.MathUtils.clamp(state.distance + e.deltaY*(e.deltaMode===1?.03:.002), .9, 4); };
     const visibility = () => { if (document.hidden) clear(); };
-    window.addEventListener('keydown',keydown); window.addEventListener('keyup',keyup); window.addEventListener('blur',clear);
+    window.addEventListener('keydown',keydown,true); window.addEventListener('keyup',keyup,true);document.addEventListener('focusin',focus); window.addEventListener('blur',clear);
     document.addEventListener('visibilitychange',visibility);
     canvas.addEventListener('pointerdown',down); canvas.addEventListener('pointermove',move); canvas.addEventListener('pointerup',end); canvas.addEventListener('pointercancel',end); canvas.addEventListener('lostpointercapture',end); canvas.addEventListener('wheel',wheel,{passive:false});
     return () => {
-      clear(); window.removeEventListener('keydown',keydown); window.removeEventListener('keyup',keyup); window.removeEventListener('blur',clear); document.removeEventListener('visibilitychange',visibility);
+      social.player.ready=false;clear(); window.removeEventListener('keydown',keydown,true); window.removeEventListener('keyup',keyup,true);document.removeEventListener('focusin',focus); window.removeEventListener('blur',clear); document.removeEventListener('visibilitychange',visibility);
       canvas.removeEventListener('pointerdown',down); canvas.removeEventListener('pointermove',move); canvas.removeEventListener('pointerup',end); canvas.removeEventListener('pointercancel',end); canvas.removeEventListener('lostpointercapture',end); canvas.removeEventListener('wheel',wheel);
       canvas.style.touchAction=previousTouch; canvas.style.cursor=previousCursor;
       if (camera instanceof THREE.PerspectiveCamera) { camera.near=originalNear; camera.updateProjectionMatrix(); }
     };
-  }, [camera,gl,input,onExit,state]);
+  }, [camera,gl,input,onExit,state,social]);
 
   function height(x:number,z:number) {
     state.origin.set(x, 30, z); state.ray.set(state.origin, DOWN); state.ray.far=40;
@@ -157,14 +148,14 @@ export default function WalkController({ environment, region, selected, input, o
       state.plazaSeen=input.plaza;const destination=plazaSpawn();
       if(destination){state.position.copy(destination);state.spawn.copy(destination);state.velocity=0;state.grounded=true;state.keys.clear();input.x=input.y=0;input.run=input.jump=false;state.start.copy(camera.position);state.startQ.copy(camera.quaternion);state.elapsed=matchMedia('(prefers-reduced-motion: reduce)').matches?1.2:0;}
     }
+    social.player.x=state.position.x;social.player.y=state.position.y;social.player.z=state.position.z;social.player.ready=true;
+    if(input.talk){input.talk=false;if(social.nearId&&!social.activeId)social.onTalk(social.nearId);}
+    const partner=social.activeId?social.agents.find(a=>CITIZENS[a.index].id===social.activeId):undefined;
     const dt=Math.min(delta,.05);state.elapsed+=dt;
     const entering=state.elapsed<1.2;
-    let x=(state.keys.has('KeyD')?1:0)-(state.keys.has('KeyA')?1:0)+input.x;
-    let forward=(state.keys.has('KeyW')?1:0)-(state.keys.has('KeyS')?1:0)-input.y;
-    if(entering){x=forward=0;input.jump=false;}
-    const run=input.run||state.keys.has('ShiftLeft')||state.keys.has('ShiftRight');
-    const dir=movement(x,forward,state.yaw),speed=run?WALK.runSpeed:WALK.speed;
-    if(input.jump&&state.grounded&&!entering){state.velocity=WALK.jumpSpeed;state.grounded=false;}input.jump=false;
+    if(input.reset!==state.reset){state.keys.clear();state.reset=input.reset;}
+    const {x,forward,dir,speed}=readMovement(input,state.keys,state.yaw,entering);
+    if(input.jump&&state.grounded&&!entering&&!input.blocked){state.velocity=WALK.jumpSpeed;state.grounded=false;}input.jump=false;
     const previousX=state.position.x,previousZ=state.position.z;
     const count=Math.max(1,Math.ceil(dt/(1/120))),step=dt/count;
     for(let i=0;i<count;i++) {
@@ -185,6 +176,8 @@ export default function WalkController({ environment, region, selected, input, o
     }
     const actual=Math.hypot(state.position.x-previousX,state.position.z-previousZ)/Math.max(dt,.001);
     if(Math.hypot(x,forward)>.05){const angle=Math.atan2(dir.x,dir.z);state.heading+=Math.atan2(Math.sin(angle-state.heading),Math.cos(angle-state.heading))*(1-Math.exp(-14*dt));}
+    if(partner){const angle=Math.atan2(partner.x-state.position.x,partner.z-state.position.z);state.heading+=Math.atan2(Math.sin(angle-state.heading),Math.cos(angle-state.heading))*(1-Math.exp(-10*dt));}
+    if(social.playerWave>0){motion.current.wave=social.playerWave;social.playerWave=0;}
     avatar.current.position.copy(state.position);avatar.current.rotation.y=state.heading;
     motion.current.speed=actual;motion.current.grounded=state.grounded;
     state.target.copy(state.position);state.target.y+=.48;
@@ -200,9 +193,9 @@ export default function WalkController({ environment, region, selected, input, o
       camera.position.lerp(state.desired,1-Math.exp(-10*dt));shortenCamera(camera.position);camera.lookAt(state.target);
     }
     const name=territories.find(t=>inside([state.position.x,state.position.z],t.points))?.name||'Uiinapur';
-    const mode:WalkStatus['motion']=entering?'Entering':!state.grounded?'Jumping':actual>.05?(run?'Running':'Walking'):'Idle';
+    const mode:WalkStatus['motion']=entering?'Entering':!state.grounded?'Jumping':actual>.05?(actual>WALK.speed*1.15?'Running':'Walking'):'Idle';
     const landmark=nearbyLandmark(state.position.x,state.position.z);
-    const key=name+mode+(landmark||'');if(key!==state.lastStatus){state.lastStatus=key;onStatus({territory:name,motion:mode,landmark});}
+    const key=name+mode+(landmark||'')+input.run;if(key!==state.lastStatus){state.lastStatus=key;onStatus({territory:name,motion:mode,landmark,runEnabled:input.run,speed:actual});}
   });
   return <group ref={avatar} visible={false}><WalkAvatar motion={motion}/></group>;
 }

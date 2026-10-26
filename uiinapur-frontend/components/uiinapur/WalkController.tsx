@@ -5,6 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { inside, plots, territories } from '@/lib/uiinapur/data';
 import { dryFootprint, movement, verticalStep, WALK, type WalkInput, type WalkStatus } from '@/lib/uiinapur/walk';
+import { PLAZA_SPAWN, nearbyLandmark, publicLand } from '@/lib/uiinapur/city';
 import WalkAvatar, { type AvatarMotion } from './WalkAvatar';
 
 export type WalkSession = { input: WalkInput; onStatus: (status: WalkStatus) => void; onExit: () => void };
@@ -16,7 +17,7 @@ export default function WalkController({ environment, region, selected, input, o
   const avatar = useRef<THREE.Group>(null);
   const motion = useRef<AvatarMotion>({ speed: 0, grounded: true, phase: 0 });
   const state = useMemo(() => ({ position: new THREE.Vector3(), velocity: 0, grounded: true, initialized: false,
-    failed: false, elapsed: 0, yaw: .6, pitch: .3, distance: 2.1, heading: 0, lastStatus: '', reset: 0,
+    failed: false, elapsed: 0, yaw: .6, pitch: .3, distance: 2.1, heading: 0, lastStatus: '', reset: 0, plazaSeen: 0,
     keys: new Set<string>(), ground: [] as THREE.Object3D[], solids: [] as THREE.Object3D[], all: [] as THREE.Object3D[],
     boxes: [] as THREE.Box3[], body: new THREE.Box3(), ray: new THREE.Raycaster(), origin: new THREE.Vector3(), direction: new THREE.Vector3(), target: new THREE.Vector3(),
     desired: new THREE.Vector3(), start: new THREE.Vector3(), startQ: new THREE.Quaternion(), goalQ: new THREE.Quaternion(),
@@ -66,7 +67,8 @@ export default function WalkController({ environment, region, selected, input, o
     const hit=state.ray.intersectObjects(state.ground,false)[0];
     if (!hit?.face) return null;
     state.normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
-    return {y:hit.point.y, slope:state.normal.y};
+    const pavement=environment.current?.userData.citySurface?.(x,z) as number|undefined;
+    return {y:Math.max(hit.point.y,pavement??-Infinity), slope:state.normal.y};
   }
   function footprint(x:number,z:number) {
     if (!dryFootprint(x,z)) return null;
@@ -97,6 +99,14 @@ export default function WalkController({ environment, region, selected, input, o
     for(const [dx,dz] of [[.02,0],[-.02,0],[0,.02],[0,-.02]]) if(blocked(x,z,dx,dz,y))return null;
     return new THREE.Vector3(x,y,z);
   }
+  function plazaSpawn() {
+    for(let i=0;i<160;i++){
+      const r=.035*Math.sqrt(i),a=i*2.399963,x=PLAZA_SPAWN[0]+Math.cos(a)*r,z=PLAZA_SPAWN[1]+Math.sin(a)*r;
+      if(!publicLand(x,z,WALK.radius))continue;
+      const spawn=safeSpawn(x,z);if(spawn)return spawn;
+    }
+    return null;
+  }
   function shortenCamera(position:THREE.Vector3) {
     state.direction.subVectors(position,state.target);
     const distance=state.direction.length();if(distance<.001)return;
@@ -115,7 +125,7 @@ export default function WalkController({ environment, region, selected, input, o
   }
 
   useFrame((_,delta) => {
-    if(!avatar.current||!environment.current||state.failed)return;
+    if(!avatar.current||!environment.current||!environment.current.userData.cityReady||state.failed)return;
     if(!state.initialized) {
       environment.current.updateWorldMatrix(true,true);
       environment.current.traverse(object=>{
@@ -136,12 +146,16 @@ export default function WalkController({ environment, region, selected, input, o
       }
       const selectedPlot=plots.find(p=>p.id===selected),territory=territories.find(t=>t.id===(selectedPlot?.territory||region))||territories[0];
       const center=selectedPlot?[selectedPlot.x,selectedPlot.z]:territory.center;
-      let spawn:THREE.Vector3|null=null;
+      let spawn:THREE.Vector3|null=plazaSpawn();
       for(let i=0;i<700&&!spawn;i++) {const r=.16*Math.sqrt(i),a=i*2.399963; const x=center[0]+Math.cos(a)*r,z=center[1]+Math.sin(a)*r;if(inside([x,z],territory.points))spawn=safeSpawn(x,z);}
       if(!spawn){state.failed=true;onStatus({territory:territory.name,motion:'Unavailable'});return;}
       state.position.copy(spawn);state.spawn.copy(spawn);state.start.copy(camera.position);state.startQ.copy(camera.quaternion);
       state.elapsed=matchMedia('(prefers-reduced-motion: reduce)').matches?1.2:0;state.initialized=true;
       avatar.current.visible=true;
+    }
+    if(input.plaza!==state.plazaSeen){
+      state.plazaSeen=input.plaza;const destination=plazaSpawn();
+      if(destination){state.position.copy(destination);state.spawn.copy(destination);state.velocity=0;state.grounded=true;state.keys.clear();input.x=input.y=0;input.run=input.jump=false;state.start.copy(camera.position);state.startQ.copy(camera.quaternion);state.elapsed=matchMedia('(prefers-reduced-motion: reduce)').matches?1.2:0;}
     }
     const dt=Math.min(delta,.05);state.elapsed+=dt;
     const entering=state.elapsed<1.2;
@@ -187,7 +201,8 @@ export default function WalkController({ environment, region, selected, input, o
     }
     const name=territories.find(t=>inside([state.position.x,state.position.z],t.points))?.name||'Uiinapur';
     const mode:WalkStatus['motion']=entering?'Entering':!state.grounded?'Jumping':actual>.05?(run?'Running':'Walking'):'Idle';
-    const key=name+mode;if(key!==state.lastStatus){state.lastStatus=key;onStatus({territory:name,motion:mode});}
+    const landmark=nearbyLandmark(state.position.x,state.position.z);
+    const key=name+mode+(landmark||'');if(key!==state.lastStatus){state.lastStatus=key;onStatus({territory:name,motion:mode,landmark});}
   });
   return <group ref={avatar} visible={false}><WalkAvatar motion={motion}/></group>;
 }

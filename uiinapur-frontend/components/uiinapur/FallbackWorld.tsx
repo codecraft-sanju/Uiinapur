@@ -1,3 +1,4 @@
+//components/uiinapur/FallbackWorld.tsx
 'use client';
 import { useMemo } from 'react';
 import { territories, plots, territory, hash, river, type Point } from '@/lib/uiinapur/data';

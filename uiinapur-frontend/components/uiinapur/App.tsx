@@ -1,3 +1,4 @@
+//components/uiinapur/App.tsx
 'use client';
 import { localId } from '@/lib/uiinapur/id';
 import { useState, useEffect, lazy, Suspense } from 'react';

@@ -1,9 +1,9 @@
 import { inside, river, territories } from './data';
 
 export const WALK = { radius: 0.11, height: 0.68, speed: 1.2, runSpeed: 2.25, gravity: 7.5, jumpSpeed: 2.3, step: 0.14, slope: 0.65 } as const;
-export type WalkInput = { x: number; y: number; run: boolean; jump: boolean; reset: number };
-export type WalkStatus = { territory: string; motion: 'Entering' | 'Idle' | 'Walking' | 'Running' | 'Jumping' | 'Unavailable' };
-export const freshWalkInput = (): WalkInput => ({ x: 0, y: 0, run: false, jump: false, reset: 0 });
+export type WalkInput = { x: number; y: number; run: boolean; jump: boolean; reset: number; plaza: number };
+export type WalkStatus = { territory: string; landmark?: string; motion: 'Entering' | 'Idle' | 'Walking' | 'Running' | 'Jumping' | 'Unavailable' };
+export const freshWalkInput = (): WalkInput => ({ x: 0, y: 0, run: false, jump: false, reset: 0, plaza: 0 });
 
 export function riverDistance(x: number, z: number) {
   let nearest = Infinity;

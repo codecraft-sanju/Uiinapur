@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable react-hooks/immutability -- Imperative R3F simulation buffers are intentionally mutable; UI state is updated separately. */
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { ArrowUpRight, Footprints, LogOut, ArrowUp, Zap } from 'lucide-react';
+import { ArrowUpRight, Footprints, LogOut, ArrowUp, Zap, MapPin, RotateCcw } from 'lucide-react';
 import World, { type WorldProps } from './World';
 import { freshWalkInput, type WalkStatus } from '@/lib/uiinapur/walk';
 
@@ -32,8 +32,10 @@ export default function WalkExperience(props: WorldProps) {
     {!active?<button className="walk-entry" onClick={()=>{setStatus({territory:'Uiinapur',motion:'Entering'});setActive(true);}}><Footprints size={18}/><span>Walk Into Uiinapur<small>SEE THE WORLD AT YOUR OWN PACE</small></span><ArrowUpRight size={18}/></button>:<>
       <section className="walk-hud" aria-label="Walk Mode controls">
         <div className="walk-identity"><Footprints size={20}/><div><small>ON FOOT / {status.motion.toUpperCase()}</small><strong>{status.territory}</strong></div></div>
-        <button onClick={exit} className="walk-exit"><LogOut size={16}/>Exit Walk Mode</button>
+        <div className="walk-hud-actions"><button className="walk-plaza" onClick={()=>{resetJoystick();input.run=false;setRunning(false);input.plaza++;}}><MapPin size={16}/>Visit National Plaza</button><button onClick={exit} className="walk-exit"><LogOut size={16}/>Exit Walk Mode</button></div>
       </section>
+      {status.landmark&&<div className="walk-landmark" aria-live="polite"><span>YOU ARE EXPLORING</span><strong>{status.landmark}</strong><small>UIINAPUR · PUBLIC REALM</small></div>}
+      <button className="walk-return" onClick={()=>{resetJoystick();input.run=false;setRunning(false);input.plaza++;}}><RotateCcw size={13}/>Return to plaza</button>
       {status.motion==='Unavailable'?<div className="walk-help" role="alert">No safe spawn found here. Exit and select another territory.</div>:<div className="walk-help"><span><kbd>W A S D</kbd> Walk</span><span><kbd>SHIFT</kbd> Run</span><span><kbd>SPACE</kbd> Jump</span><span>Drag to look · Scroll to zoom · Esc to exit</span></div>}
       <div className="walk-mobile">
         <div className="walk-joystick" role="group" aria-label="Movement joystick" onPointerDown={e=>{if(joystickPointer.current!==null)return;joystickPointer.current=e.pointerId;e.currentTarget.setPointerCapture(e.pointerId);joystick(e);}} onPointerMove={joystick} onPointerUp={resetJoystick} onPointerCancel={resetJoystick} onLostPointerCapture={resetJoystick}><span ref={knob}/><small>MOVE</small></div>

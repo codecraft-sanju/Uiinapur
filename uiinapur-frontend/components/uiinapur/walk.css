@@ -39,3 +39,23 @@
 
 .walk-help[role="alert"] { display:block; bottom:180px; white-space:normal; text-align:center; }
 .walk-entry:disabled { opacity:.65; cursor:not-allowed; }
+
+/* National Plaza controls stay clear of the desktop help and mobile joystick. */
+.walk-hud-actions { display:flex; gap:8px; pointer-events:auto; }
+.walk-plaza { display:flex; gap:8px; align-items:center; min-height:44px; padding:12px 16px; border:1px solid #d6bd8755; border-radius:7px; background:#20322de8; color:#ebd5a8; font-size:11px; }
+.walk-plaza:hover,.walk-return:hover { background:#345047; }
+.walk-landmark { position:absolute; left:50%; top:105px; transform:translateX(-50%); z-index:20; width:max-content; max-width:85%; padding:13px 25px; border-top:1px solid #d6bd8755; text-align:center; background:linear-gradient(90deg,transparent,#0b1e26d9,transparent); pointer-events:none; animation:plaza-arrive .4s ease both; }
+.walk-landmark span,.walk-landmark small { display:block; font-size:7px; letter-spacing:2.3px; color:#d6bd87; }
+.walk-landmark strong { display:block; margin:8px 0; color:#f3e9d1; font-weight:400; font-size:22px; }
+.walk-landmark small { color:#91b0a5; font-size:6px; }
+.walk-return { position:absolute; z-index:25; top:92px; right:25px; display:flex; align-items:center; gap:6px; padding:9px 12px; color:#bdd1c6; border:1px solid #a4ecd033; border-radius:6px; background:#10262ad9; font-size:10px; }
+@keyframes plaza-arrive { from { opacity:0; } to { opacity:1; } }
+@media (max-width:800px), (pointer:coarse) {
+ .walk-hud { gap:8px; }
+ .walk-hud-actions { flex-direction:column; align-items:flex-end; gap:6px; }
+ .walk-plaza { font-size:9px; padding:9px; }
+ .walk-landmark { top:145px; padding:10px 12px; }
+ .walk-landmark strong { font-size:18px; }
+ .walk-return { top:auto; bottom:calc(180px + env(safe-area-inset-bottom)); right:24px; min-height:44px; }
+}
+@media (prefers-reduced-motion:reduce) { .walk-landmark { animation:none; } }
